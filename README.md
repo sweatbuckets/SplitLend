@@ -115,6 +115,38 @@ class LC,CT,DT contract;
 class DB1,DB2,DB3 db;
 ```
 
+## Deposit flow
+
+```mermaid
+sequenceDiagram
+  participant A as Owner A
+  participant FE as Frontend
+  participant BE as Backend
+  participant LC as KarmaSessionLending
+  participant CT as Collateral Token
+
+  A->>FE: Connect wallet A
+  FE->>BE: Fetch owner policy
+  BE-->>FE: Policy and limits
+
+  A->>FE: Enter target borrow amount
+  FE->>BE: Request quote
+  BE-->>FE: Required collateral and quote
+
+  FE->>FE: Generate random B wallets
+  A->>FE: Sign split plan
+  FE-->>FE: Store prepared split plan
+
+  A->>CT: Approve collateral
+  A->>LC: Deposit owner collateral
+  FE->>BE: Submit signed split plan
+  BE->>LC: Allocate collateral to B wallets
+
+  LC-->>BE: Allocation event
+  BE-->>FE: Allocation success
+  FE-->>A: Deposit flow completed
+```
+
 ## Local run order
 
 1. Start Anvil in `karma-lending/`
