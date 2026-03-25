@@ -1,0 +1,19 @@
+.DS_Store
+
+# Backend
+backend/.env
+backend/node_modules/
+backend/dist/
+
+# Frontend
+frontend/.env.local
+frontend/.next/
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
+
+# Foundry
+karma-lending/.env
+karma-lending/.git.backup/
+karma-lending/cache/
+karma-lending/out/
+karma-lending/broadcast/
