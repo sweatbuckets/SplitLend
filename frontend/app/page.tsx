@@ -4,12 +4,12 @@ export default function HomePage() {
   return (
     <main className="page-shell">
       <section className="hero">
-        <p className="eyebrow">Privacy Lending MVP</p>
-        <h1>Split A into multiple ephemeral B wallets while keeping the link offchain.</h1>
+        <p className="eyebrow">SplitLend</p>
+        <h1>Private position splitting for collateralized lending.</h1>
         <p className="hero-copy">
-          The frontend now handles wallet connection, quote requests, deposit
-          approval, local B1..Bn generation, and a single owner-signed batch
-          split plan for backend handoff.
+          Split one owner wallet into multiple ephemeral borrower wallets,
+          deposit collateral, and manage borrow or repay flows while keeping
+          the owner-to-borrower link offchain.
         </p>
       </section>
       <LoanFlowCard />

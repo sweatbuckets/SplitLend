@@ -6,8 +6,8 @@ import type { Metadata } from "next";
 import { AppProviders } from "@/components/providers";
 
 export const metadata: Metadata = {
-  title: "Karma Lending",
-  description: "Privacy-oriented session-wallet lending flow"
+  title: "SplitLend",
+  description: "Private position splitting for collateralized lending"
 };
 
 export default function RootLayout({
