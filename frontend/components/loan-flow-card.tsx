@@ -167,6 +167,7 @@ const publicClient = createPublicClient({
   transport: http(rpcUrl)
 });
 const splitWalletStorageKey = "karma-generated-split-wallets";
+const splitWalletVaultStorageKey = "karma-generated-split-wallet-vault";
 const addedWalletStorageKey = "karma-added-split-wallets";
 
 export function LoanFlowCard() {
@@ -205,6 +206,7 @@ export function LoanFlowCard() {
   const [showWalletInfoModal, setShowWalletInfoModal] = useState(false);
   const [showAddAccountGuideModal, setShowAddAccountGuideModal] = useState(false);
   const [addedSplitWallets, setAddedSplitWallets] = useState<`0x${string}`[]>([]);
+  const [walletVault, setWalletVault] = useState<SplitWallet[]>([]);
   const [positionSnapshots, setPositionSnapshots] = useState<Record<string, PositionSnapshot>>({});
   const [positionCreatedAts, setPositionCreatedAts] = useState<Record<string, string>>({});
   const [positionUpdatedAts, setPositionUpdatedAts] = useState<Record<string, string>>({});
@@ -418,7 +420,9 @@ export function LoanFlowCard() {
   const depositFlowComplete = dbSplitWallets.length > 0;
   const selectedPosition = actionBorrowerWallet ? positionSnapshots[actionBorrowerWallet] : undefined;
   const selectedGeneratedWallet =
-    splitWallets.find((wallet) => wallet.address.toLowerCase() === actionBorrowerWallet.toLowerCase()) ?? null;
+    splitWallets.find((wallet) => wallet.address.toLowerCase() === actionBorrowerWallet.toLowerCase()) ??
+    walletVault.find((wallet) => wallet.address.toLowerCase() === actionBorrowerWallet.toLowerCase()) ??
+    null;
   const isSelectedWalletAdded =
     Boolean(actionBorrowerWallet) &&
     addedSplitWallets.some((wallet) => wallet.toLowerCase() === actionBorrowerWallet.toLowerCase());
@@ -447,7 +451,7 @@ export function LoanFlowCard() {
     0n
   );
   const sortedHomePositionRecords = [...homePositionRecords].sort(
-    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
+    (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
   );
   const canonicalBorrowerWalletOrder =
     sortedHomePositionRecords.length > 0
@@ -811,6 +815,25 @@ export function LoanFlowCard() {
     }
 
     try {
+      const storedVault = window.localStorage.getItem(splitWalletVaultStorageKey);
+      if (storedVault) {
+        const parsedVault = JSON.parse(storedVault) as PersistedSplitWallet[];
+        if (Array.isArray(parsedVault)) {
+          setWalletVault(
+            parsedVault.map((wallet) => ({
+              address: wallet.address,
+              privateKey: wallet.privateKey,
+              percentage: wallet.percentage,
+              collateralAmount: BigInt(wallet.collateralAmount)
+            }))
+          );
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(splitWalletVaultStorageKey);
+    }
+
+    try {
       const storedAddedWallets = window.localStorage.getItem(addedWalletStorageKey);
       if (!storedAddedWallets) {
         return;
@@ -846,6 +869,36 @@ export function LoanFlowCard() {
     }));
 
     window.localStorage.setItem(splitWalletStorageKey, JSON.stringify(persistedWallets));
+  }, [splitWallets]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || splitWallets.length === 0) {
+      return;
+    }
+
+    setWalletVault((prev) => {
+      const mergedVault = new Map<string, SplitWallet>();
+      for (const wallet of prev) {
+        mergedVault.set(wallet.address.toLowerCase(), wallet);
+      }
+      for (const wallet of splitWallets) {
+        mergedVault.set(wallet.address.toLowerCase(), wallet);
+      }
+
+      const nextVault = Array.from(mergedVault.values());
+      window.localStorage.setItem(
+        splitWalletVaultStorageKey,
+        JSON.stringify(
+          nextVault.map((wallet) => ({
+            address: wallet.address,
+            privateKey: wallet.privateKey,
+            percentage: wallet.percentage,
+            collateralAmount: wallet.collateralAmount.toString()
+          }))
+        )
+      );
+      return nextVault;
+    });
   }, [splitWallets]);
 
   useEffect(() => {
@@ -1641,6 +1694,16 @@ export function LoanFlowCard() {
                                   <span className="muted position-inline-meta">{`${createdAtLabel} 생성됨`}</span>
                                 )}
                               </div>
+                              <button
+                                className="secondary split-remove-button"
+                                type="button"
+                                onClick={() => {
+                                  setActionBorrowerWallet(record.borrowerWallet);
+                                  setShowWalletInfoModal(true);
+                                }}
+                              >
+                                정보
+                              </button>
                             </div>
                             <strong className="generated-wallet-address mono home-wallet-address">{record.borrowerWallet}</strong>
                             <div className="position-metric-grid">
@@ -2807,100 +2870,100 @@ export function LoanFlowCard() {
             </div>
           </section>
 
-          {showWalletInfoModal && (
-            <div className="wallet-modal-backdrop" onClick={() => setShowWalletInfoModal(false)}>
-              <div className="wallet-modal-card" onClick={(event) => event.stopPropagation()}>
-                <div className="wallet-modal-head">
-                  <div className="warning-wallet-row">
-                    <span className="generated-wallet-tag">
-                      {selectedBorrowerIndex >= 0 ? `B${selectedBorrowerIndex + 1}` : "B"}
-                    </span>
-                    <strong className="generated-wallet-address mono">
-                      {actionBorrowerWallet || "선택된 B 지갑이 없습니다."}
-                    </strong>
-                  </div>
-                  <button
-                    className="icon-copy-button"
-                    type="button"
-                    onClick={() => setShowWalletInfoModal(false)}
-                    title="닫기"
-                    aria-label="닫기"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <div className="wallet-secret-box">
-                  <span className="summary-label">Private Key</span>
-                  <div className="wallet-secret-row">
-                    <strong className="wallet-secret-value mono">{maskedPrivateKey}</strong>
-                    <button
-                      className="icon-copy-button"
-                      type="button"
-                      onClick={copySelectedBorrowerPrivateKey}
-                      title="private key 복사"
-                      aria-label="private key 복사"
-                      disabled={!selectedGeneratedWallet}
-                    >
-                      ⧉
-                    </button>
-                  </div>
-                  <p className="muted wallet-secret-copy">
-                    {selectedGeneratedWallet
-                      ? "복사 후 메타마스크에 가져오면 선택한 B 지갑으로 전환할 수 있습니다."
-                      : "현재 브라우저 세션에서 생성한 B 지갑이 아니라 private key를 표시할 수 없습니다."}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {showAddAccountGuideModal && (
-            <div className="wallet-modal-backdrop" onClick={() => setShowAddAccountGuideModal(false)}>
-              <div className="wallet-modal-card" onClick={(event) => event.stopPropagation()}>
-                <div className="wallet-modal-head">
-                  <div className="warning-wallet-row">
-                    <span className="generated-wallet-tag">
-                      {selectedBorrowerIndex >= 0 ? `B${selectedBorrowerIndex + 1}` : "B"}
-                    </span>
-                    <strong className="generated-wallet-address mono">
-                      {actionBorrowerWallet || "선택된 B 지갑이 없습니다."}
-                    </strong>
-                  </div>
-                  <button
-                    className="icon-copy-button"
-                    type="button"
-                    onClick={() => setShowAddAccountGuideModal(false)}
-                    title="닫기"
-                    aria-label="닫기"
-                  >
-                    ×
-                  </button>
-                </div>
-
-                <div className="wallet-secret-box">
-                  <span className="summary-label">메타마스크 추가 순서</span>
-                  <ol className="wallet-guide-list">
-                    <li>먼저 `B 지갑 정보 보기`에서 private key를 복사합니다.</li>
-                    <li>메타마스크에서 `지갑 추가`로 이동하고 `계정 가져오기`를 누릅니다.</li>
-                    <li>복사한 private key를 붙여넣고 B 계정을 추가합니다.</li>
-                  </ol>
-                  <div className="actions actions-right">
-                    <button
-                      className="secondary"
-                      type="button"
-                      onClick={markSelectedWalletAdded}
-                    >
-                      추가 완료
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
         </aside>}
       </div>
+
+      {showWalletInfoModal && (
+        <div className="wallet-modal-backdrop" onClick={() => setShowWalletInfoModal(false)}>
+          <div className="wallet-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="wallet-modal-head">
+              <div className="warning-wallet-row">
+                <span className="generated-wallet-tag">
+                  {selectedBorrowerIndex >= 0 ? `B${selectedBorrowerIndex + 1}` : "B"}
+                </span>
+                <strong className="generated-wallet-address mono">
+                  {actionBorrowerWallet || "선택된 B 지갑이 없습니다."}
+                </strong>
+              </div>
+              <button
+                className="icon-copy-button"
+                type="button"
+                onClick={() => setShowWalletInfoModal(false)}
+                title="닫기"
+                aria-label="닫기"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="wallet-secret-box">
+              <span className="summary-label">Private Key</span>
+              <div className="wallet-secret-row">
+                <strong className="wallet-secret-value mono">{maskedPrivateKey}</strong>
+                <button
+                  className="icon-copy-button"
+                  type="button"
+                  onClick={copySelectedBorrowerPrivateKey}
+                  title="private key 복사"
+                  aria-label="private key 복사"
+                  disabled={!selectedGeneratedWallet}
+                >
+                  ⧉
+                </button>
+              </div>
+              <p className="muted wallet-secret-copy">
+                {selectedGeneratedWallet
+                  ? "복사 후 메타마스크에 가져오면 선택한 B 지갑으로 전환할 수 있습니다."
+                  : "현재 브라우저 세션에서 생성한 B 지갑이 아니라 private key를 표시할 수 없습니다."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddAccountGuideModal && (
+        <div className="wallet-modal-backdrop" onClick={() => setShowAddAccountGuideModal(false)}>
+          <div className="wallet-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="wallet-modal-head">
+              <div className="warning-wallet-row">
+                <span className="generated-wallet-tag">
+                  {selectedBorrowerIndex >= 0 ? `B${selectedBorrowerIndex + 1}` : "B"}
+                </span>
+                <strong className="generated-wallet-address mono">
+                  {actionBorrowerWallet || "선택된 B 지갑이 없습니다."}
+                </strong>
+              </div>
+              <button
+                className="icon-copy-button"
+                type="button"
+                onClick={() => setShowAddAccountGuideModal(false)}
+                title="닫기"
+                aria-label="닫기"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="wallet-secret-box">
+              <span className="summary-label">메타마스크 추가 순서</span>
+              <ol className="wallet-guide-list">
+                <li>먼저 `B 지갑 정보 보기`에서 private key를 복사합니다.</li>
+                <li>메타마스크에서 `지갑 추가`로 이동하고 `계정 가져오기`를 누릅니다.</li>
+                <li>복사한 private key를 붙여넣고 B 계정을 추가합니다.</li>
+              </ol>
+              <div className="actions actions-right">
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={markSelectedWalletAdded}
+                >
+                  추가 완료
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
